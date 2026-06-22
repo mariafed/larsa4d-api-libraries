@@ -6,8 +6,9 @@ from win32com.client import gencache
 # LARSA libraries this example uses. Then force late binding so the objects keep their real
 # method/property names when reading data from LARSA (an early-bound cache hides element fields 
 # behind base COM interfaces).
+gencache.EnsureDispatch("LarsaData.clsUnits")
 gencache.EnsureDispatch("LarsaElements.clsProject")
-gencache.EnsureDispatch("LarsaData.clsResultGroup")
+gencache.EnsureDispatch("LarsaElements.clsAnalysisResults")
 gencache.GetClassForCLSID = lambda clsid: None  
 
 def CreateObject(class_name):
@@ -128,7 +129,7 @@ project.analysisType = win32com.client.constants.AT_STAGE_STANDARD   # Staged co
 project.analysisStageStart = 1
 project.analysisStageEnd = project.stages.Count
 
-filename = r"C:\temp\test.lar"
+filename = r"C:\Users\LARSA\Documents\LARSA Projects\test.lar"
 lar_format_version = (8, 9, 0)
 project.SaveToFile(filename, win32com.client.constants.FILE_FORMAT_LAR6A,
                    *lar_format_version, None)
@@ -144,7 +145,20 @@ project.ReadFromFile(filename, analysis, False)
 analysis.Load(project)
 
 caseName = "Stage 1: Loading"
-resultCase = next(c for c in analysis.ResultGroups.GetCases(None, False)[0] if c.Name == caseName)
+
+def getResultCaseByName(caseName):
+    resultCases = analysis.GetAllCases(None)
+    return [c for c in resultCases if c.Name == caseName][0]
+   
+def getResults(resultCase, dataType, envelopeCol, envelopeAbs, incremental, 
+                           inUCS, loadClass, indexes):
+    data = analysis.loadData3(resultCase, dataType, envelopeCol, envelopeAbs, incremental, 
+                           inUCS, loadClass, [], [], indexes)[8]
+    data = analysis.convertData(dataType, [0] + list(data), project.units)[1][1:]   # convert into Results units
+    headers = columnHeaders(analysis, dataType)  
+    return dict(zip(headers, data)) if headers else list(data)
+   
+resultCase = getResultCaseByName(caseName)
 
 envelopeCol = 0
 envelopeAbs = False
@@ -157,11 +171,8 @@ jointID = 3
 dataType = win32com.client.constants.RESULTDATA_JOINT_DISPLACEMENTS
 indexes = [0] * 4
 indexes[1] = analysis.getJointIndexFromID(jointID)[0]
-data = analysis.loadData3(resultCase, dataType, envelopeCol, envelopeAbs, incremental, 
-                           inUCS, loadClass, [], [], indexes)[8]
-data = analysis.convertData(dataType, [0] + list(data), project.units)[1][1:]   # convert into Results units
-headers = columnHeaders(analysis, dataType)  
-displ = dict(zip(headers, data)) if headers else list(data)
+displ = getResults(resultCase, dataType, envelopeCol, envelopeAbs, incremental, 
+                           inUCS, loadClass, indexes)
 print("Displacements, Joint 3:", displ)
 
 # Member sectional forces
@@ -173,11 +184,8 @@ indexes = [0] * 4
 indexes[1] = analysis.getMemberIndexFromID(memberID)[0]
 indexes[2] = station
 indexes[3] = numSegments
-data = analysis.loadData3(resultCase, dataType, envelopeCol, envelopeAbs, incremental, 
-                           inUCS, loadClass, [], [], indexes)[8]
-data = analysis.convertData(dataType, [0] + list(data), project.units)[1][1:]   # convert into Results units
-headers = columnHeaders(analysis, dataType)
-sectionalForces = dict(zip(headers, data)) if headers else list(data)
+sectionalForces = getResults(resultCase, dataType, envelopeCol, envelopeAbs, incremental, 
+                           inUCS, loadClass, indexes)
 print("Member sectional forces, Member 2, Station 0:", sectionalForces)
 
 # Member end forces (local)
